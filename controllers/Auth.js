@@ -18,7 +18,7 @@ const Register = async (req, res) =>{
     try{
         const user = await User.create({email, password})
         const validationToken = createValidationToken(user._id)
-        const validationUrl = `http://localhost:8080/api/v1/email/${validationToken}`
+        const validationUrl = `https://mypostsapi.onrender.com/api/v1/email/${validationToken}`
         const validationMessage = {
             to: email,
             subject: 'Verify your email',
