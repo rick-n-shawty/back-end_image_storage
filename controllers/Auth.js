@@ -18,7 +18,7 @@ const Register = async (req, res) =>{
     try{
         const user = await User.create({email, password})
         const validationToken = createValidationToken(user._id)
-        const validationUrl = `http://localhost:5000/api/v1/email/${validationToken}`
+        const validationUrl = `http://localhost:8080/api/v1/email/${validationToken}`
         const validationMessage = {
             to: email,
             subject: 'Verify your email',
@@ -61,6 +61,7 @@ const VerifyEmail = async (req, res) =>{
         const userId = decoded.userId
         if(!userId) return res.status(StatusCodes.UNAUTHORIZED).send('<h1>failed to verify</h1>')
         const user = await User.findOneAndUpdate({_id: userId}, {isVerified: true}, {new: true})
+        console.log('verify', user)
         return res.status(StatusCodes.OK).send('<h1>You verified your email, proceed to the login page please</h1>')
     }catch(err){
         console.log(err)
@@ -74,6 +75,7 @@ const Login = async(req, res) =>{
     if(!email || !password) return res.status(StatusCodes.BAD_REQUEST).json({err: 'please provide all credentials'})
     try{
         const user = await User.findOne({email})
+        console.log(user)
         if(!user) return res.status(StatusCodes.NOT_FOUND).json({err: 'user not found'})
         if(!user.isVerified) return res.status(StatusCodes.BAD_REQUEST).json({err: 'email is not verified'})
         const isMatch = await user.Compare(password)
@@ -87,10 +89,26 @@ const Login = async(req, res) =>{
     }
 }
 
+const getNewToken = (req, res) =>{
+    const authHead = req.headers.authorization 
+    if(!authHead) return res.status(StatusCodes.UNAUTHORIZED).json({err: 'not authorized'})
+    const token = authHead.split(' ')[1]
+    if(!token) return res.status(StatusCodes.UNAUTHORIZED).json({err: 'not authorized'})
+    jwt.verify(token, process.env.JWT_REFRESH_KEY, (err, decoded) =>{
+        if(err) return res.status(StatusCodes.BAD_REQUEST).json({err: 'not authorized'})
+        const userId = decoded.userId 
+        const accessToken = createAccessToken(userId)
+        const refreshToken = createRefreshToken(userId)
+        res.status(StatusCodes.OK).json({msg: 'authorized', accessToken, refreshToken})
+    })
+}
+
+
 
 module.exports = {
     Register,
     SendSecondEmail,
     VerifyEmail,
-    Login
+    Login,
+    getNewToken
 }

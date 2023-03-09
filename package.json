@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-cloudfront": "^3.287.0",
     "@aws-sdk/client-s3": "^3.282.0",
     "@aws-sdk/s3-request-presigner": "^3.282.0",
     "bcryptjs": "^2.4.3",
@@ -22,6 +23,7 @@
     "mongoose": "^7.0.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.1",
+    "nodemon": "^2.0.21",
     "sharp": "^0.31.3"
   }
 }

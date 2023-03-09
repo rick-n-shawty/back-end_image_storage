@@ -9,6 +9,7 @@ const upload = multer({storage})
 const {createRandomName} = require('../tokens')
 const Post = require('../DB/models.js/Post')
 const { StatusCodes } = require('http-status-codes')
+const {CloudFrontClient, CreateInvalidationCommand} = require('@aws-sdk/client-cloudfront')
 const s3 = new S3Client({
     credentials: {
         accessKeyId: process.env.AWS_ACCESS_KEY,
@@ -16,16 +17,21 @@ const s3 = new S3Client({
     },
     region: 'us-east-1'
 })
+const CloudFront = new CloudFrontClient({
+    credentials:{
+        accessKeyId: process.env.AWS_ACCESS_KEY,
+        secretAccessKey: process.env.AWS_SECRET_KEY 
+    },
+    region: 'us-east-1'
+})
 
-// const getImages = async (req, res) => {}
-// const postImage = async (req, res) => {}
-// const deleteImage = async (req, res) => {}
 
 router.post('/images', upload.single('image'), async(req, res) =>{
     const {userId} = req  // it comes from the AUTH middle function
     const {caption} = req.body
     const file = req.file 
-    if(!file){} // what if there is no file?
+    if(!file) return res.status(StatusCodes.BAD_REQUEST).json({msg: 'there is no file to upload'}) // what if there is no file?
+    console.log(file)
     const buffer = await sharp(req.file.buffer).resize({height: 1920, width: 1080, fit:'contain'}).toBuffer()
     const randomImageName = createRandomName()
     const params = {
@@ -50,20 +56,43 @@ router.get('/images', async (req, res) => {
     try{
         const posts = await Post.find({createdBy: userId})
         for(const post of posts){
-            const getCommand = new GetObjectCommand({
-                Bucket: process.env.AWS_BUCKET_NAME,
-                Key: post.imageName
-            })
-            const url = await getSignedUrl(s3, getCommand, {expiresIn: 36000})
-            post.imageUrl = url
-        }
+            post.imageUrl = process.env.CDN_URL + `/${post.imageName}`
+        }   
         return res.status(StatusCodes.OK).json({posts})
     }catch(err){
         console.log(err)
         return res.status(500).json({err})
     }
 }) 
-router.delete('/image/:id') //delete image
+router.delete('/image/:id', async (req, res) => {
+    try{
+        const imageId = req.params.id 
+        const userId = req.userId 
+        const post = await Post.findOneAndDelete({imageName: imageId, createdBy: userId}) 
+        if(!post) return res.status(StatusCodes.NOT_FOUND).json({err: 'not found'})
+        const deleteCommand = new DeleteObjectCommand({
+            Key: imageId,
+            Bucket: process.env.AWS_BUCKET_NAME
+        })
+        const AWS_Response = await s3.send(deleteCommand) // delete from the s3 bucket 
+        // then we need to invalidate the cash for that image
+        const invalidationCommand = new CreateInvalidationCommand({
+            DistributionId: process.env.DISTRIBUTION_ID,
+            InvalidationBatch: {
+                CallerReference: post.imageName,
+                Paths: {
+                    Quantity: 1,
+                    Items: ['/' + post.imageName]
+                }
+            }
+        })
+        await CloudFront.send(invalidationCommand) // delete from CDN 
+        return res.status(StatusCodes.OK).json({msg: 'image has been deleted'})
+    }catch(err){
+        console.log(err)
+        return res.status(500).json({err: 'some error'})
+    }
+})
 
 
 
